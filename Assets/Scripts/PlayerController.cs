@@ -15,5 +15,12 @@ public class PlayerController : NetworkBehaviour
         float v = Input.GetAxis("Vertical");
         transform.Translate(new Vector3(h, 0, v) * speed * Time.deltaTime);
     }
+    
+    public override void OnNetworkSpawn()
+    {
+        Debug.Log($"{OwnerClientId} | IsOwner: {IsOwner}");
+    }
+
+
 
 }
