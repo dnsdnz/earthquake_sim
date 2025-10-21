@@ -1,5 +1,5 @@
-using Cinemachine;
 using DilmerGames.Core.Singletons;
+using Unity.Cinemachine;
 using UnityEngine;
 
 public class PlayerCameraFollow : Singleton<PlayerCameraFollow>
@@ -25,7 +25,7 @@ public class PlayerCameraFollow : Singleton<PlayerCameraFollow>
         cinemachineVirtualCamera.Follow = transform;
 
         var perlin = cinemachineVirtualCamera.GetCinemachineComponent<CinemachineBasicMultiChannelPerlin>();
-        perlin.m_AmplitudeGain = amplitudeGain;
-        perlin.m_FrequencyGain = frequencyGain;
+        perlin.AmplitudeGain = amplitudeGain;
+        perlin.FrequencyGain = frequencyGain;
     }
 }

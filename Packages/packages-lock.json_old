@@ -97,6 +97,16 @@
         "com.unity.modules.uielements": "1.0.0"
       }
     },
+    "com.unity.netcode.adapter.utp": {
+      "version": "1.0.0-pre.6",
+      "depth": 0,
+      "source": "registry",
+      "dependencies": {
+        "com.unity.transport": "1.0.0-pre.14",
+        "com.unity.netcode.gameobjects": "1.0.0-pre.6"
+      },
+      "url": "https://packages.unity.com"
+    },
     "com.unity.netcode.gameobjects": {
       "version": "2.6.0",
       "depth": 0,
