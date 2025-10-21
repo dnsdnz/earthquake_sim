@@ -8,7 +8,7 @@
     "com.unity.inputsystem": "1.14.2",
     "com.unity.multiplayer.center": "1.0.0",
     "com.unity.netcode.gameobjects": "2.6.0",
-    "com.unity.services.relay": "1.0.5",
+    "com.unity.services.multiplayer": "1.1.8",
     "com.unity.test-framework": "1.6.0",
     "com.unity.timeline": "1.8.9",
     "com.unity.ugui": "2.0.0",

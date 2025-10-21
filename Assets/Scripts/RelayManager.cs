@@ -5,7 +5,6 @@ using Unity.Netcode.Transports.UTP;
 using Unity.Services.Authentication;
 using Unity.Services.Core;
 using Unity.Services.Core.Environments;
-using Unity.Services.Relay;
 using Unity.Services.Relay.Models;
 using UnityEngine;
 
@@ -35,7 +34,7 @@ public class RelayManager : Singleton<RelayManager>
             await AuthenticationService.Instance.SignInAnonymouslyAsync();
         }
 
-        Allocation allocation = await Relay.Instance.CreateAllocationAsync(maxNumberOfConnections);
+        Allocation allocation = await Unity.Services.Relay.RelayService.Instance.CreateAllocationAsync(maxNumberOfConnections);
 
         RelayHostData relayHostData = new RelayHostData
         {
@@ -47,7 +46,7 @@ public class RelayManager : Singleton<RelayManager>
             ConnectionData = allocation.ConnectionData
         };
 
-        relayHostData.JoinCode = await Relay.Instance.GetJoinCodeAsync(relayHostData.AllocationID);
+        relayHostData.JoinCode = await Unity.Services.Relay.RelayService.Instance.GetJoinCodeAsync(relayHostData.AllocationID);
 
         Transport.SetRelayServerData(relayHostData.IPv4Address, relayHostData.Port, relayHostData.AllocationIDBytes,
                 relayHostData.Key, relayHostData.ConnectionData);
@@ -71,7 +70,7 @@ public class RelayManager : Singleton<RelayManager>
             await AuthenticationService.Instance.SignInAnonymouslyAsync();
         }
 
-        JoinAllocation allocation = await Relay.Instance.JoinAllocationAsync(joinCode);
+        JoinAllocation allocation = await Unity.Services.Relay.RelayService.Instance.JoinAllocationAsync(joinCode);
 
         RelayJoinData relayJoinData = new RelayJoinData
         {

@@ -72,7 +72,7 @@ namespace StarterAssets
 
             GameObject vcam = GameObject.Find(CinemachineVirtualCameraName);
 
-            if (!vcam)
+            if(!vcam)
             {
                 HandleInstantiatingPrefab(StarterAssetsPath + prefabPath,
                     CinemachineVirtualCameraName,
@@ -86,7 +86,7 @@ namespace StarterAssets
 
             GameObject[] targets = GameObject.FindGameObjectsWithTag(CinemachineTargetTag);
             GameObject target = targets.FirstOrDefault(t => t.transform.IsChildOf(targetParent));
-            if (target == null)
+            if(target == null)
             {
                 target = new GameObject("PlayerCameraRoot");
                 target.transform.SetParent(targetParent);
@@ -94,6 +94,7 @@ namespace StarterAssets
                 target.tag = CinemachineTargetTag;
                 Undo.RegisterCreatedObjectUndo(target, "Created new cinemachine target");
             }
+
             CheckVirtualCameraFollowReference(target, _cinemachineVirtualCamera);
         }
 
@@ -101,7 +102,7 @@ namespace StarterAssets
         {
             GameObject[] mainCameras = GameObject.FindGameObjectsWithTag(MainCameraTag);
 
-            if (mainCameras.Length < 1)
+            if(mainCameras.Length < 1)
             {
                 // if there are no MainCameras, add one
                 HandleInstantiatingPrefab(StarterAssetsPath + prefabPath, MainCameraPrefabName,
@@ -110,7 +111,7 @@ namespace StarterAssets
             else
             {
                 // make sure the found camera has a cinemachine brain (we only need 1)
-                if (!mainCameras[0].TryGetComponent(out CinemachineBrain cinemachineBrain))
+                if(!mainCameras[0].TryGetComponent(out CinemachineBrain cinemachineBrain))
                     mainCameras[0].AddComponent<CinemachineBrain>();
             }
         }
@@ -119,7 +120,7 @@ namespace StarterAssets
             GameObject cinemachineVirtualCamera)
         {
             var serializedObject =
-                new SerializedObject(cinemachineVirtualCamera.GetComponent<CinemachineVirtualCamera>());
+                new SerializedObject(cinemachineVirtualCamera.GetComponent<CinemachineCamera>());
             var serializedProperty = serializedObject.FindProperty("m_Follow");
             serializedProperty.objectReferenceValue = target.transform;
             serializedObject.ApplyModifiedProperties();
@@ -127,7 +128,7 @@ namespace StarterAssets
 
         private static void HandleInstantiatingPrefab(string path, string prefabName, out GameObject prefab)
         {
-            prefab = (GameObject) PrefabUtility.InstantiatePrefab(
+            prefab = (GameObject)PrefabUtility.InstantiatePrefab(
                 AssetDatabase.LoadAssetAtPath<Object>($"{path}{prefabName}.prefab"));
             Undo.RegisterCreatedObjectUndo(prefab, "Instantiate Starter Asset Prefab");
 

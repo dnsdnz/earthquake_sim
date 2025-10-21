@@ -17,12 +17,13 @@ namespace StarterAssets
         [MenuItem(MenuRoot + "/Reset Third Person Controller Armature", false)]
         static void ResetThirdPersonControllerArmature()
         {
-            var thirdPersonControllers = FindObjectsOfType<ThirdPersonController>();
-            var player = thirdPersonControllers.FirstOrDefault(controller => controller.GetComponent<Animator>() && controller.CompareTag(PlayerTag));
+            var thirdPersonControllers = FindObjectsByType<ThirdPersonController>(FindObjectsSortMode.None);
+            var player = thirdPersonControllers.FirstOrDefault(controller =>
+                controller.GetComponent<Animator>() && controller.CompareTag(PlayerTag));
             GameObject playerGameObject;
 
             // player
-            if (player == null)
+            if(player == null)
                 HandleInstantiatingPrefab(StarterAssetsPath + ThirdPersonPrefabPath,
                     PlayerArmaturePrefabName, out playerGameObject);
             else
@@ -35,12 +36,13 @@ namespace StarterAssets
         [MenuItem(MenuRoot + "/Reset Third Person Controller Capsule", false)]
         static void ResetThirdPersonControllerCapsule()
         {
-            var thirdPersonControllers = FindObjectsOfType<ThirdPersonController>();
-            var player = thirdPersonControllers.FirstOrDefault(controller => !controller.GetComponent<Animator>() && controller.CompareTag(PlayerTag));
+            var thirdPersonControllers = FindObjectsByType<ThirdPersonController>(FindObjectsSortMode.None);
+            var player = thirdPersonControllers.FirstOrDefault(controller =>
+                !controller.GetComponent<Animator>() && controller.CompareTag(PlayerTag));
             GameObject playerGameObject;
 
             // player
-            if (player == null)
+            if(player == null)
                 HandleInstantiatingPrefab(StarterAssetsPath + ThirdPersonPrefabPath,
                     PlayerCapsulePrefabName, out playerGameObject);
             else
