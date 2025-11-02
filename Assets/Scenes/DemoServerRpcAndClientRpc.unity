@@ -1680,8 +1680,8 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1442138341}
-  - component: {fileID: 1442138342}
   - component: {fileID: 1442138343}
+  - component: {fileID: 1442138342}
   m_Layer: 0
   m_Name: PlayersManager
   m_TagString: Untagged

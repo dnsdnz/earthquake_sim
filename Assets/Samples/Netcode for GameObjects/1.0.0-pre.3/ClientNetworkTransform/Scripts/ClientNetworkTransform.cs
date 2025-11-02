@@ -25,16 +25,7 @@ namespace Unity.Netcode.Samples
         }
 
 
-        private void Update()
-        {
-            if(NetworkManager.Singleton != null &&
-               (NetworkManager.Singleton.IsConnectedClient || NetworkManager.Singleton.IsListening))
-            {
-                if(CanCommitToTransform)
-                {
-                    TryCommitTransformToServer(transform, NetworkManager.LocalTime.Time);
-                }
-            }
-        }
+        // No Update override. NetworkTransform handles dirty checking and replication internally.
     }
 }
+

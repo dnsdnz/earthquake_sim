@@ -142,42 +142,127 @@ public class PlayerWithRaycastControl : NetworkBehaviour
 
     private void ClientInput()
     {
-        // left & right rotation
-        Vector3 inputRotation = new Vector3(0, Input.GetAxis("Horizontal"), 0);
+        // Smoothing state
+        if (!_turnVelInit) { _turnVelInit = true; _turnSmoothVelocity = 0f; }
+        float h = Input.GetAxis("Horizontal");
+        float v = Input.GetAxis("Vertical");
 
-        // forward & backward direction
-        Vector3 direction = transform.TransformDirection(Vector3.forward);
-        float forwardInput = Input.GetAxis("Vertical");
-        Vector3 inputPosition = direction * forwardInput;
+        // Camera-relative movement
+        Vector3 camF = Vector3.forward;
+        Vector3 camR = Vector3.right;
+        var cam = Camera.main;
+        if (cam != null)
+        {
+            camF = cam.transform.forward; camF.y = 0f; camF.Normalize();
+            camR = cam.transform.right;   camR.y = 0f; camR.Normalize();
+        }
+        else
+        {
+            camF = transform.forward;
+            camR = transform.right;
+        }
+
+        Vector3 moveInput = (camF * v + camR * h);
+        Vector3 inputPosition = moveInput;
 
         // change fighting states
-        if (ActivePunchActionKey() && forwardInput == 0)
+        if (ActivePunchActionKey() && Mathf.Approximately(v, 0f) && Mathf.Approximately(h, 0f))
         {
             UpdatePlayerStateServerRpc(PlayerState.Punch);
             return;
         }
 
-        // change motion states
-        if (forwardInput == 0)
-            UpdatePlayerStateServerRpc(PlayerState.Idle);
-        else if (!ActiveRunningActionKey() && forwardInput > 0 && forwardInput <= 1)
-            UpdatePlayerStateServerRpc(PlayerState.Walk);
-        else if (ActiveRunningActionKey() && forwardInput > 0 && forwardInput <= 1)
+        // Rotation handling: face camera on forward, don't rotate on strafe-only, idle edge/align
+        Vector3 inputRotation = Vector3.zero;
+        var currentYaw = transform.eulerAngles.y;
+        bool hasForward = Mathf.Abs(v) > 0.01f;
+        bool hasStrafe = Mathf.Abs(h) > 0.01f;
+        if (hasForward)
         {
-            inputPosition = direction * runSpeedOffset;
+            float camYaw = cam != null ? cam.transform.eulerAngles.y : currentYaw;
+            var yawDelta = Mathf.DeltaAngle(currentYaw, camYaw);
+            if (Mathf.Abs(yawDelta) < 1.5f)
+            {
+                inputRotation = Vector3.zero;
+            }
+            else
+            {
+                var smoothYaw = Mathf.SmoothDampAngle(currentYaw, camYaw, ref _turnSmoothVelocity, 0.12f);
+                var step = Mathf.DeltaAngle(currentYaw, smoothYaw);
+                if (Mathf.Abs(step) < 0.05f) step = 0f;
+                inputRotation = new Vector3(0f, step / Mathf.Max(rotationSpeed, 0.0001f), 0f);
+            }
+        }
+        else if (hasStrafe)
+        {
+            inputRotation = Vector3.zero;
+        }
+        else
+        {
+            float yawDelta = 0f;
+            if (Cursor.lockState != CursorLockMode.Locked)
+            {
+                yawDelta = ComputeEdgeTurnDelta(0.12f, rotationSpeed * 3f);
+            }
+            else if (Camera.main != null)
+            {
+                var camYaw = Camera.main.transform.eulerAngles.y;
+                var angle = Mathf.DeltaAngle(currentYaw, camYaw);
+                if (Mathf.Abs(angle) > 20f)
+                {
+                    var step = Mathf.Sign(angle) * Mathf.Min(Mathf.Abs(angle), 90f * Time.deltaTime);
+                    yawDelta = step;
+                }
+            }
+            inputRotation = new Vector3(0f, yawDelta / Mathf.Max(rotationSpeed, 0.0001f), 0f);
+        }
+
+        // change motion states
+        if (Mathf.Approximately(h, 0f) && Mathf.Approximately(v, 0f))
+            UpdatePlayerStateServerRpc(PlayerState.Idle);
+        else if (ActiveRunningActionKey() && v >= 0f)
+        {
+            inputPosition = moveInput.normalized * runSpeedOffset;
             UpdatePlayerStateServerRpc(PlayerState.Run);
         }
-        else if (forwardInput < 0)
+        else if (v < 0f && !ActiveRunningActionKey())
             UpdatePlayerStateServerRpc(PlayerState.ReverseWalk);
+        else
+            UpdatePlayerStateServerRpc(PlayerState.Walk);
 
         // let server know about position and rotation client changes
-        if (oldInputPosition != inputPosition ||
-            oldInputRotation != inputRotation)
+        if (oldInputPosition != inputPosition || oldInputRotation != inputRotation)
         {
             oldInputPosition = inputPosition;
             oldInputRotation = inputRotation;
             UpdateClientPositionAndRotationServerRpc(inputPosition * walkSpeed, inputRotation * rotationSpeed);
         }
+    }
+
+    private float _turnSmoothVelocity = 0f;
+    private bool _turnVelInit = false;
+
+    private static float ComputeEdgeTurnDelta(float edgePct, float maxSpeedDegPerSec)
+    {
+        if (Screen.width <= 0) return 0f;
+        float x = Input.mousePosition.x;
+        float w = Screen.width;
+        float leftZone = w * edgePct;
+        float rightZone = w * (1f - edgePct);
+        float t = 0f;
+        if (x < leftZone)
+        {
+            t = (leftZone - x) / leftZone; // 0..1
+            t = t * t; // ease
+            return -maxSpeedDegPerSec * t * Time.deltaTime;
+        }
+        else if (x > rightZone)
+        {
+            t = (x - rightZone) / (w - rightZone); // 0..1
+            t = t * t; // ease
+            return maxSpeedDegPerSec * t * Time.deltaTime;
+        }
+        return 0f;
     }
 
     private static bool ActiveRunningActionKey()
