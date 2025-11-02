@@ -1,9 +1,9 @@
 using Unity.Netcode;
-using Unity.Netcode.Samples;
+using Unity.Netcode.Components;
 using UnityEngine;
 
 [RequireComponent(typeof(NetworkObject))]
-[RequireComponent(typeof(ClientNetworkTransform))]
+[RequireComponent(typeof(NetworkTransform))]
 public class PlayerBallControl : NetworkBehaviour
 {
     [SerializeField]
