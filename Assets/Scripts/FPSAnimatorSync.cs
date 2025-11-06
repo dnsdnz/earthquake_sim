@@ -6,7 +6,6 @@ public class FPSAnimatorSync : NetworkBehaviour
 {
     [SerializeField] private Animator animator;
 
-    // Networked animator parameters for new controller
     private NetworkVariable<float> networkMoveX = new NetworkVariable<float>(
         0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
     private NetworkVariable<float> networkMoveY = new NetworkVariable<float>(
@@ -28,28 +27,32 @@ public class FPSAnimatorSync : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
-        networkMoveX.OnValueChanged += OnParamsChanged;
-        networkMoveY.OnValueChanged += OnParamsChanged;
-        networkIsCrouching.OnValueChanged += OnParamsChanged;
-        // Apply initial
+        networkMoveX.OnValueChanged += OnMoveXChanged;
+        networkMoveY.OnValueChanged += OnMoveYChanged;
+        networkIsCrouching.OnValueChanged += OnCrouchChanged;
         ApplyAnimator(networkMoveX.Value, networkMoveY.Value, networkIsCrouching.Value);
     }
 
     private void OnDestroy()
     {
-        networkMoveX.OnValueChanged -= OnParamsChanged;
-        networkMoveY.OnValueChanged -= OnParamsChanged;
-        networkIsCrouching.OnValueChanged -= OnParamsChanged;
+        networkMoveX.OnValueChanged -= OnMoveXChanged;
+        networkMoveY.OnValueChanged -= OnMoveYChanged;
+        networkIsCrouching.OnValueChanged -= OnCrouchChanged;
     }
 
-    private void OnParamsChanged(float _, float __)
+    private void OnMoveXChanged(float oldVal, float newVal)
     {
-        ApplyAnimator(networkMoveX.Value, networkMoveY.Value, networkIsCrouching.Value);
+        ApplyAnimator(newVal, networkMoveY.Value, networkIsCrouching.Value);
     }
 
-    private void OnParamsChanged(bool _, bool __)
+    private void OnMoveYChanged(float oldVal, float newVal)
     {
-        ApplyAnimator(networkMoveX.Value, networkMoveY.Value, networkIsCrouching.Value);
+        ApplyAnimator(networkMoveX.Value, newVal, networkIsCrouching.Value);
+    }
+
+    private void OnCrouchChanged(bool oldVal, bool newVal)
+    {
+        ApplyAnimator(networkMoveX.Value, networkMoveY.Value, newVal);
     }
 
     private void ApplyAnimator(float x, float y, bool crouch)
@@ -71,13 +74,11 @@ public class FPSAnimatorSync : NetworkBehaviour
 
     public void SetMovement(float x, float y, bool crouch)
     {
-        // Clamp to expected range -1..1
         x = Mathf.Clamp(x, -1f, 1f);
         y = Mathf.Clamp(y, -1f, 1f);
 
         if (!IsSpawned)
         {
-            // Not yet spawned: apply locally for preview
             ApplyAnimator(x, y, crouch);
             return;
         }
@@ -90,7 +91,6 @@ public class FPSAnimatorSync : NetworkBehaviour
         }
         else if (IsOwner)
         {
-            // Local prediction
             ApplyAnimator(x, y, crouch);
             SetMovementServerRpc(x, y, crouch);
         }
