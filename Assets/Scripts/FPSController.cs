@@ -16,6 +16,10 @@ public class FPSController : MonoBehaviour
     public bool createOwnCameraIfMissing = true;
     public float eyeHeight = 1.7f;
     public float fov = 75f;
+    [Tooltip("Forward offset applied to the camera when standing (local Z, meters).")]
+    public float standCameraForwardOffset = 0.02f;
+    [Tooltip("Forward offset applied to the camera when crouching (local Z, meters).")]
+    public float crouchCameraForwardOffset = 0.06f;
 
     [Header("Look")]
     public bool lockCursor = true;
@@ -268,14 +272,15 @@ public class FPSController : MonoBehaviour
             float targetHeight = crouch ? crouchHeight : _standEyeHeight;
             float camY = Mathf.Lerp(cameraPivot.localPosition.y, targetHeight, Time.deltaTime * crouchLerp);
             _cameraBaseHeight = camY;
-            cameraPivot.localPosition = new Vector3(0f, _cameraBaseHeight, 0f) + _shakePosOffset;
+            float camZ = crouch ? crouchCameraForwardOffset : standCameraForwardOffset;
+            cameraPivot.localPosition = new Vector3(0f, _cameraBaseHeight, camZ) + _shakePosOffset;
             _isCrouching = crouch;
             if (_isCrouching) _moveVel = Vector3.ClampMagnitude(_moveVel, crouchSpeed);
         }
         else
         {
             _cameraBaseHeight = _standEyeHeight;
-            cameraPivot.localPosition = new Vector3(0f, _cameraBaseHeight, 0f) + _shakePosOffset;
+            cameraPivot.localPosition = new Vector3(0f, _cameraBaseHeight, standCameraForwardOffset) + _shakePosOffset;
         }
 
         Vector3 motion = _moveVel * Time.deltaTime;
@@ -283,33 +288,13 @@ public class FPSController : MonoBehaviour
         motion.y += _velocity.y * Time.deltaTime;
         _cc.Move(motion);
 
-        // Determine and push animation state
-        var inputMag = input.magnitude;
-        PlayerState newState = PlayerState.Idle;
-        if (inputMag <= 0.001f)
+        // Determine and push animator parameters (moveX/moveY/isCrouching)
+        // Map WASD to blend tree directly: X = strafe, Y = forward
+        float moveX = Mathf.Clamp(input.x, -1f, 1f);
+        float moveY = Mathf.Clamp(input.z, -1f, 1f);
+        if (_animSync != null)
         {
-            newState = PlayerState.Idle;
-        }
-        else if (input.z < -0.01f)
-        {
-            newState = PlayerState.ReverseWalk;
-        }
-        else if (sprint && input.z >= 0f)
-        {
-            newState = PlayerState.Run;
-        }
-        else
-        {
-            newState = PlayerState.Walk;
-        }
-
-        if (newState != _lastState)
-        {
-            _lastState = newState;
-            if (_animSync != null)
-            {
-                _animSync.SetState(newState);
-            }
+            _animSync.SetMovement(moveX, moveY, _isCrouching);
         }
     }
 

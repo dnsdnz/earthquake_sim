@@ -7,6 +7,9 @@ public class PlayerHud : NetworkBehaviour
     [SerializeField]
     private NetworkVariable<NetworkString> playerNetworkName = new NetworkVariable<NetworkString>();
 
+    [SerializeField]
+    private TextMeshProUGUI overlayText;
+
     private bool overlaySet = false;
 
     public override void OnNetworkSpawn()
@@ -19,8 +22,16 @@ public class PlayerHud : NetworkBehaviour
 
     public void SetOverlay()
     {
-        var localPlayerOverlay = gameObject.GetComponentInChildren<TextMeshProUGUI>();
-        localPlayerOverlay.text = $"{playerNetworkName.Value}";
+        if (overlayText == null)
+        {
+            overlayText = gameObject.GetComponentInChildren<TextMeshProUGUI>();
+        }
+        if (overlayText == null)
+        {
+            Debug.LogWarning("PlayerHud: No TextMeshProUGUI found in children to set player name overlay.");
+            return;
+        }
+        overlayText.text = $"{playerNetworkName.Value}";
     }
 
     public void Update()

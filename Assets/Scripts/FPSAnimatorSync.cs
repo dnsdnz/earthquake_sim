@@ -6,10 +6,17 @@ public class FPSAnimatorSync : NetworkBehaviour
 {
     [SerializeField] private Animator animator;
 
-    private NetworkVariable<PlayerState> networkPlayerState = new NetworkVariable<PlayerState>(
-        PlayerState.Idle, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    // Networked animator parameters for new controller
+    private NetworkVariable<float> networkMoveX = new NetworkVariable<float>(
+        0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private NetworkVariable<float> networkMoveY = new NetworkVariable<float>(
+        0f, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
+    private NetworkVariable<bool> networkIsCrouching = new NetworkVariable<bool>(
+        false, NetworkVariableReadPermission.Everyone, NetworkVariableWritePermission.Server);
 
-    private PlayerState _lastAppliedState = PlayerState.Idle;
+    private float _lastX = float.NaN;
+    private float _lastY = float.NaN;
+    private bool _lastCrouch = false;
 
     private void Awake()
     {
@@ -21,54 +28,71 @@ public class FPSAnimatorSync : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
-        networkPlayerState.OnValueChanged += OnStateChanged;
+        networkMoveX.OnValueChanged += OnParamsChanged;
+        networkMoveY.OnValueChanged += OnParamsChanged;
+        networkIsCrouching.OnValueChanged += OnParamsChanged;
         // Apply initial
-        OnStateChanged(PlayerState.Idle, networkPlayerState.Value);
+        ApplyAnimator(networkMoveX.Value, networkMoveY.Value, networkIsCrouching.Value);
     }
 
     private void OnDestroy()
     {
-        networkPlayerState.OnValueChanged -= OnStateChanged;
+        networkMoveX.OnValueChanged -= OnParamsChanged;
+        networkMoveY.OnValueChanged -= OnParamsChanged;
+        networkIsCrouching.OnValueChanged -= OnParamsChanged;
     }
 
-    private void OnStateChanged(PlayerState oldState, PlayerState newState)
+    private void OnParamsChanged(float _, float __)
+    {
+        ApplyAnimator(networkMoveX.Value, networkMoveY.Value, networkIsCrouching.Value);
+    }
+
+    private void OnParamsChanged(bool _, bool __)
+    {
+        ApplyAnimator(networkMoveX.Value, networkMoveY.Value, networkIsCrouching.Value);
+    }
+
+    private void ApplyAnimator(float x, float y, bool crouch)
     {
         if (animator == null) return;
-        if (_lastAppliedState == newState) return;
-        _lastAppliedState = newState;
-        animator.SetTrigger(newState.ToString());
+        if (_lastX != x) animator.SetFloat("MoveX", x);
+        if (_lastY != y) animator.SetFloat("MoveY", y);
+        if (_lastCrouch != crouch) animator.SetBool("IsCrouching", crouch);
+        _lastX = x; _lastY = y; _lastCrouch = crouch;
     }
 
     [ServerRpc]
-    private void SetStateServerRpc(PlayerState newState)
+    private void SetMovementServerRpc(float x, float y, bool crouch)
     {
-        networkPlayerState.Value = newState;
+        networkMoveX.Value = x;
+        networkMoveY.Value = y;
+        networkIsCrouching.Value = crouch;
     }
 
-    public void SetState(PlayerState newState)
+    public void SetMovement(float x, float y, bool crouch)
     {
+        // Clamp to expected range -1..1
+        x = Mathf.Clamp(x, -1f, 1f);
+        y = Mathf.Clamp(y, -1f, 1f);
+
         if (!IsSpawned)
         {
-            // Fallback if not yet spawned
-            _lastAppliedState = newState;
-            if (animator != null) animator.SetTrigger(newState.ToString());
+            // Not yet spawned: apply locally for preview
+            ApplyAnimator(x, y, crouch);
             return;
         }
 
         if (IsServer)
         {
-            networkPlayerState.Value = newState;
+            networkMoveX.Value = x;
+            networkMoveY.Value = y;
+            networkIsCrouching.Value = crouch;
         }
         else if (IsOwner)
         {
-            // Apply locally for instant feedback, then replicate
-            if (_lastAppliedState != newState && animator != null)
-            {
-                _lastAppliedState = newState;
-                animator.SetTrigger(newState.ToString());
-            }
-            SetStateServerRpc(newState);
+            // Local prediction
+            ApplyAnimator(x, y, crouch);
+            SetMovementServerRpc(x, y, crouch);
         }
     }
 }
-
