@@ -5,6 +5,10 @@ using Unity.Cinemachine;
 [RequireComponent(typeof(CharacterController))]
 public class FPSController : MonoBehaviour
 {
+    // Global movement lock, controlled by network events (e.g., announcement flow)
+    public static bool GlobalMovementLocked = true;
+    // Global sprint permission; when false, sprint input is ignored and speed stays at walkSpeed
+    public static bool SprintAllowed = false;
     [Header("Netcode")]
     [Tooltip("If true, this script only runs for the local owner when a NetworkObject is present.")]
     public bool ownerOnly = true;
@@ -60,6 +64,10 @@ public class FPSController : MonoBehaviour
     private float _standEyeHeight;
     private bool _isCrouching;
     private bool _activeForThisClient = true;
+    private bool _forcedCrouch;
+    private float _lastMoveWarn;
+    private float _lastCollisionReport;
+    private float _lastSprintWarn;
 
     // Animation
     private FPSAnimatorSync _animSync;
@@ -78,6 +86,9 @@ public class FPSController : MonoBehaviour
     private Vector3 _shakeRotOffset;
     private float _shakeSeedX, _shakeSeedY, _shakeSeedZ;
     private float _cameraBaseHeight;
+    // Continuous quake control (managed by server via RPC)
+    private bool _continuousQuake;
+    private float _contPosAmp, _contRotAmp, _contFreq;
 
     private void Awake()
     {
@@ -173,6 +184,27 @@ public class FPSController : MonoBehaviour
             StartQuake(quakeDuration);
         }
 
+        // During movement lock, allow triggering drop-cover request with C
+        if (GlobalMovementLocked && Input.GetKeyDown(KeyCode.C))
+        {
+            DropCoverManager.RequestForLocal();
+        }
+        // After quake ends (movement unlocked) and if currently forced crouch, allow exit with C
+        if (!GlobalMovementLocked && _forcedCrouch && Input.GetKeyDown(KeyCode.C))
+        {
+            DropCoverManager.RequestExitForLocal();
+        }
+
+        // Sprint warning: when player presses Shift to run, show local warning (cooldown protected)
+        if (Input.GetKeyDown(KeyCode.LeftShift) || Input.GetKeyDown(KeyCode.RightShift))
+        {
+            if (Time.time - _lastSprintWarn > 1.0f && AnnouncementUI.Instance != null)
+            {
+                AnnouncementUI.Instance.Show("Koşma!", 1.5f);
+                _lastSprintWarn = Time.time;
+            }
+        }
+
         UpdateQuake(Time.deltaTime);
         HandleLook();
         HandleMove();
@@ -228,6 +260,21 @@ public class FPSController : MonoBehaviour
         float h = Input.GetAxis("Horizontal");
         float v = Input.GetAxis("Vertical");
 
+        bool attemptedMove = (Mathf.Abs(h) + Mathf.Abs(v)) > 0.01f || Input.GetKeyDown(KeyCode.Space) || Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+
+        if (GlobalMovementLocked)
+        {
+            h = 0f; v = 0f;
+            if (attemptedMove && Time.time - _lastMoveWarn > 1.0f)
+            {
+                if (AnnouncementUI.Instance != null)
+                {
+                    AnnouncementUI.Instance.Show("Pozisyonunu terketme.", 1.5f);
+                }
+                _lastMoveWarn = Time.time;
+            }
+        }
+
         Vector3 input = new Vector3(h, 0f, v);
         input = Vector3.ClampMagnitude(input, 1f);
 
@@ -237,6 +284,8 @@ public class FPSController : MonoBehaviour
         Vector3 desired = (camF * input.z + camR * input.x);
 
         bool sprint = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+        if (!SprintAllowed) sprint = false;
+        if (GlobalMovementLocked) sprint = false;
         float targetSpeed = sprint ? sprintSpeed : walkSpeed;
         Vector3 desiredVel = desired * targetSpeed;
 
@@ -248,7 +297,7 @@ public class FPSController : MonoBehaviour
         if (grounded)
         {
             _velocity.y = groundedGravity;
-            if (Input.GetKeyDown(KeyCode.Space))
+            if (!GlobalMovementLocked && Input.GetKeyDown(KeyCode.Space))
             {
                 _velocity.y = Mathf.Sqrt(-2f * gravity * jumpHeight);
             }
@@ -256,7 +305,7 @@ public class FPSController : MonoBehaviour
         else
         {
             // coyote time
-            if ((Time.time - _lastGroundedTime) <= coyoteTime && Input.GetKeyDown(KeyCode.Space))
+            if (!GlobalMovementLocked && (Time.time - _lastGroundedTime) <= coyoteTime && Input.GetKeyDown(KeyCode.Space))
             {
                 _velocity.y = Mathf.Sqrt(-2f * gravity * jumpHeight);
             }
@@ -268,7 +317,7 @@ public class FPSController : MonoBehaviour
         // Crouch
         if (enableCrouch)
         {
-            bool crouch = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.C);
+            bool crouch = _forcedCrouch || Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.C);
             float targetHeight = crouch ? crouchHeight : _standEyeHeight;
             float camY = Mathf.Lerp(cameraPivot.localPosition.y, targetHeight, Time.deltaTime * crouchLerp);
             _cameraBaseHeight = camY;
@@ -309,6 +358,27 @@ public class FPSController : MonoBehaviour
 
     private void UpdateQuake(float dt)
     {
+        if (_continuousQuake)
+        {
+            float tCont = Time.time;
+            if (_shakeSeedX == 0f && _shakeSeedY == 0f && _shakeSeedZ == 0f)
+            {
+                _shakeSeedX = Random.Range(0f, 1000f);
+                _shakeSeedY = Random.Range(0f, 1000f);
+                _shakeSeedZ = Random.Range(0f, 1000f);
+            }
+            float cnx = (Mathf.PerlinNoise(_shakeSeedX, tCont * _contFreq) - 0.5f) * 2f;
+            float cny = (Mathf.PerlinNoise(_shakeSeedY, (tCont + 13.37f) * _contFreq) - 0.5f) * 2f;
+            float cnz = (Mathf.PerlinNoise(_shakeSeedZ, (tCont + 29.17f) * _contFreq) - 0.5f) * 2f;
+            _shakePosOffset = new Vector3(cnx, cny, cnz) * _contPosAmp;
+
+            float crx = (Mathf.PerlinNoise(_shakeSeedX + 101f, tCont * _contFreq) - 0.5f) * 2f;
+            float cry = (Mathf.PerlinNoise(_shakeSeedY + 233f, (tCont + 7.77f) * _contFreq) - 0.5f) * 2f;
+            float crz = (Mathf.PerlinNoise(_shakeSeedZ + 307f, (tCont + 19.19f) * _contFreq) - 0.5f) * 2f;
+            _shakeRotOffset = new Vector3(crx, cry, crz) * _contRotAmp;
+            return;
+        }
+
         if (_quakeTime <= 0f)
         {
             _shakePosOffset = Vector3.zero;
@@ -319,18 +389,58 @@ public class FPSController : MonoBehaviour
         _quakeTime -= dt;
         float progress = Mathf.Clamp01(1f - (_quakeTime / _quakeTotal)); // 0->1
         float damper = Mathf.Max(0f, quakeDamping.Evaluate(progress));    // 1->0
-        float time = (_quakeTotal - _quakeTime);
+        float tQuake = (_quakeTotal - _quakeTime);
 
         // Position noise
-        float nx = (Mathf.PerlinNoise(_shakeSeedX, time * quakeFrequency) - 0.5f) * 2f;
-        float ny = (Mathf.PerlinNoise(_shakeSeedY, (time + 13.37f) * quakeFrequency) - 0.5f) * 2f;
-        float nz = (Mathf.PerlinNoise(_shakeSeedZ, (time + 29.17f) * quakeFrequency) - 0.5f) * 2f;
+        float nx = (Mathf.PerlinNoise(_shakeSeedX, tQuake * quakeFrequency) - 0.5f) * 2f;
+        float ny = (Mathf.PerlinNoise(_shakeSeedY, (tQuake + 13.37f) * quakeFrequency) - 0.5f) * 2f;
+        float nz = (Mathf.PerlinNoise(_shakeSeedZ, (tQuake + 29.17f) * quakeFrequency) - 0.5f) * 2f;
         _shakePosOffset = new Vector3(nx, ny, nz) * (quakePositionAmplitude * damper);
 
         // Rotation noise (degrees)
-        float rx = (Mathf.PerlinNoise(_shakeSeedX + 101f, time * quakeFrequency) - 0.5f) * 2f;
-        float ry = (Mathf.PerlinNoise(_shakeSeedY + 233f, (time + 7.77f) * quakeFrequency) - 0.5f) * 2f;
-        float rz = (Mathf.PerlinNoise(_shakeSeedZ + 307f, (time + 19.19f) * quakeFrequency) - 0.5f) * 2f;
+        float rx = (Mathf.PerlinNoise(_shakeSeedX + 101f, tQuake * quakeFrequency) - 0.5f) * 2f;
+        float ry = (Mathf.PerlinNoise(_shakeSeedY + 233f, (tQuake + 7.77f) * quakeFrequency) - 0.5f) * 2f;
+        float rz = (Mathf.PerlinNoise(_shakeSeedZ + 307f, (tQuake + 19.19f) * quakeFrequency) - 0.5f) * 2f;
         _shakeRotOffset = new Vector3(rx, ry, rz) * (quakeRotationAmplitude * damper);
+    }
+
+    public void SetForcedCrouch(bool on)
+    {
+        _forcedCrouch = on;
+    }
+
+    public void SetContinuousQuake(bool active, float posAmp, float rotAmp, float freq)
+    {
+        _continuousQuake = active;
+        _contPosAmp = posAmp;
+        _contRotAmp = rotAmp;
+        _contFreq = Mathf.Max(0.01f, freq);
+        if (active && (_shakeSeedX == 0f && _shakeSeedY == 0f && _shakeSeedZ == 0f))
+        {
+            _shakeSeedX = Random.Range(0f, 1000f);
+            _shakeSeedY = Random.Range(0f, 1000f);
+            _shakeSeedZ = Random.Range(0f, 1000f);
+        }
+        if (!active)
+        {
+            _shakePosOffset = Vector3.zero;
+            _shakeRotOffset = Vector3.zero;
+        }
+    }
+
+    private void OnControllerColliderHit(ControllerColliderHit hit)
+    {
+        // Only for local active client
+        if (!_activeForThisClient) return;
+        if (Time.time - _lastCollisionReport < 0.75f) return; // throttle
+
+        var otherNo = hit.collider != null ? hit.collider.GetComponentInParent<NetworkObject>() : null;
+        var nm = NetworkManager.Singleton;
+        if (nm == null || otherNo == null) return;
+        if (otherNo.OwnerClientId == nm.LocalClientId) return; // self
+
+        // Likely another player; notify server to show warnings to both involved clients
+        CollisionWarningManager.ReportCollisionLocal(otherNo.OwnerClientId);
+        _lastCollisionReport = Time.time;
     }
 }

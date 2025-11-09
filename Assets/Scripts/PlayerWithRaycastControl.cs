@@ -62,9 +62,7 @@ public class PlayerWithRaycastControl : NetworkBehaviour
     {
         if (IsClient && IsOwner)
         {
-            transform.position = new Vector3(Random.Range(defaultInitialPositionOnPlane.x, defaultInitialPositionOnPlane.y), 0,
-                   Random.Range(defaultInitialPositionOnPlane.x, defaultInitialPositionOnPlane.y));
-
+            // Position is assigned by server-side spawn system.
             PlayerCameraFollow.Instance.FollowPlayer(transform.Find("PlayerCameraRoot"));
         }
     }

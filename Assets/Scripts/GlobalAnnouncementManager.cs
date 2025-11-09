@@ -4,7 +4,7 @@ using UnityEngine;
 
 public class GlobalAnnouncementManager : NetworkBehaviour
 {
-    [SerializeField] private KeyCode triggerKey = KeyCode.X;
+    [SerializeField] private KeyCode triggerKey = KeyCode.M;
     [SerializeField] private float delaySeconds = 10f;
     [SerializeField] private string announcementText = "Deprem başladı!";
     [SerializeField] private float showSeconds = 5f;
@@ -19,7 +19,19 @@ public class GlobalAnnouncementManager : NetworkBehaviour
         if (Input.GetKeyDown(triggerKey))
         {
             _pending = true;
-            StartCoroutine(DelayAndAnnounce());
+            // Start drop-cover flow: lock and prompt immediately
+            if (DropCoverManager.Instance != null)
+            {
+                DropCoverManager.Instance.TriggerDropCoverSequence();
+            }
+            else
+            {
+                // Fallback: lock and prompt directly
+                SetMovementLockClientRpc(true);
+                ShowAnnouncementClientRpc("Çök kapan tutun yapmak için C'ye basın", 10f);
+            }
+            // Optionally still run delayed announcement if desired
+            // StartCoroutine(DelayAndAnnounce());
         }
     }
 
@@ -40,6 +52,8 @@ public class GlobalAnnouncementManager : NetworkBehaviour
 
         // Trigger a one-shot quake on the local player's camera when the message appears
         TryTriggerLocalQuake();
+
+        // No longer auto-unlocking here; drop-cover flow manages lock state
     }
 
     private void TryTriggerLocalQuake()
@@ -56,5 +70,16 @@ public class GlobalAnnouncementManager : NetworkBehaviour
         {
             fps.StartQuake(fps.quakeDuration);
         }
+    }
+
+    [ClientRpc]
+    private void SetMovementLockClientRpc(bool locked)
+    {
+        SetMovementLock(locked);
+    }
+
+    private void SetMovementLock(bool locked)
+    {
+        FPSController.GlobalMovementLocked = locked;
     }
 }

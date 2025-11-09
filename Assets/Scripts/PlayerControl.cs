@@ -42,11 +42,7 @@ public class PlayerControl : NetworkBehaviour
 
     void Start()
     {
-        if (IsClient && IsOwner)
-        {
-            transform.position = new Vector3(Random.Range(defaultInitialPositionOnPlane.x, defaultInitialPositionOnPlane.y), 0,
-                   Random.Range(defaultInitialPositionOnPlane.x, defaultInitialPositionOnPlane.y));
-        }
+        // Position is assigned by server-side spawn system.
     }
 
     void Update()
