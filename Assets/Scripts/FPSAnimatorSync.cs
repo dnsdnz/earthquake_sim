@@ -23,6 +23,10 @@ public class FPSAnimatorSync : NetworkBehaviour
         {
             animator = GetComponent<Animator>();
         }
+        if (animator != null)
+        {
+            animator.applyRootMotion = false;
+        }
     }
 
     public override void OnNetworkSpawn()

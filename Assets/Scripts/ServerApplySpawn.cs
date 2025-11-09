@@ -123,4 +123,7 @@ public class ServerApplySpawn : NetworkBehaviour
         transform.SetPositionAndRotation(pos, rot);
         if (cc != null) cc.enabled = true;
     }
+
+    // Note: Do not add/remove NetworkBehaviours during network ticks.
+    // FPSAnimatorSync must be on the prefab so that OnNetworkSpawn wires up correctly.
 }

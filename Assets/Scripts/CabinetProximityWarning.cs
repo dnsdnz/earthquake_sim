@@ -8,12 +8,16 @@ public class CabinetProximityWarning : MonoBehaviour
     [SerializeField] private string warningText = "Dolaplarin yanina yaklasma!";
     [SerializeField] private float rewarnCooldown = 3f;
 
-    private float _lastShownTime = -999f;
+    private readonly System.Collections.Generic.Dictionary<ulong, float> _lastShownByClient = new System.Collections.Generic.Dictionary<ulong, float>();
 
     private void Reset()
     {
         var col = GetComponent<Collider>();
         if (col != null) col.isTrigger = true;
+        var rb = GetComponent<Rigidbody>();
+        if (rb == null) rb = gameObject.AddComponent<Rigidbody>();
+        rb.isKinematic = true;
+        rb.useGravity = false;
     }
 
     private void OnTriggerEnter(Collider other)
@@ -23,10 +27,7 @@ public class CabinetProximityWarning : MonoBehaviour
 
     private void OnTriggerStay(Collider other)
     {
-        if (Time.time - _lastShownTime >= rewarnCooldown)
-        {
-            TryWarn(other);
-        }
+        TryWarn(other);
     }
 
     private void TryWarn(Collider other)
@@ -37,11 +38,14 @@ public class CabinetProximityWarning : MonoBehaviour
         if (nm == null || nm.LocalClient == null) return;
         if (no.OwnerClientId != nm.LocalClientId) return;
 
+        float last;
+        _lastShownByClient.TryGetValue(no.OwnerClientId, out last);
+        if (Time.time - last < rewarnCooldown) return;
+
         if (AnnouncementUI.Instance != null)
         {
             AnnouncementUI.Instance.Show(warningText, 2.0f);
-            _lastShownTime = Time.time;
+            _lastShownByClient[no.OwnerClientId] = Time.time;
         }
     }
 }
-

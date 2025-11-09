@@ -10,16 +10,24 @@ public class SpawnerControl : NetworkSingleton<SpawnerControl>
     [SerializeField]
     private int maxObjectInstanceCount = 3;
 
+    [Header("Diagnostics / Toggle")]
+    [SerializeField]
+    private bool enablePhysicsObjects = false;
+
     private void Awake()
     {
-        NetworkManager.Singleton.OnServerStarted += () =>
+        if (enablePhysicsObjects && NetworkManager.Singleton != null)
         {
-            NetworkObjectPool.Instance.InitializePool();
-        };
+            NetworkManager.Singleton.OnServerStarted += () =>
+            {
+                NetworkObjectPool.Instance.InitializePool();
+            };
+        }
     }
 
     public void SpawnObjects()
     {
+        if (!enablePhysicsObjects) return;
         if (!IsServer) return;
 
         for (int i = 0; i < maxObjectInstanceCount; i++)

@@ -6,6 +6,8 @@ TagManager:
   tags:
   - CinemachineTarget
   - DropCoverSpot
+  - GlassWarning
+  - CabinetWarning
   layers:
   - Default
   - TransparentFX

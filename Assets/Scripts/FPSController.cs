@@ -239,6 +239,11 @@ public class FPSController : MonoBehaviour
 
         _cameraBaseHeight = eyeHeight;
         _initialized = true;
+
+        // Ensure legacy movement scripts on this object are disabled to avoid conflicts
+        var pc = GetComponent<PlayerControl>(); if (pc) pc.enabled = false;
+        var pca = GetComponent<PlayerControlAuthorative>(); if (pca) pca.enabled = false;
+        var pwrc = GetComponent<PlayerWithRaycastControl>(); if (pwrc) pwrc.enabled = false;
     }
 
     private void HandleLook()

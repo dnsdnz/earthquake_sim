@@ -123,7 +123,16 @@ public class UIManager : Singleton<UIManager>
                 Logger.Instance.LogWarning("Server has not started...");
                 return;
             }
-            SpawnerControl.Instance.SpawnObjects();
+            // Don't implicitly create SpawnerControl; only use if present
+            var sc = Object.FindFirstObjectByType<SpawnerControl>();
+            if (sc != null)
+            {
+                sc.SpawnObjects();
+            }
+            else
+            {
+                Logger.Instance.LogInfo("SpawnerControl not present; physics spawn skipped.");
+            }
         });
     }
 }

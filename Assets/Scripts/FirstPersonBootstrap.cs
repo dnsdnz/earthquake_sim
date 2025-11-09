@@ -19,24 +19,12 @@ public class FirstPersonBootstrap : MonoBehaviour
     private void OnEnable()
     {
         SceneManager.activeSceneChanged += OnSceneChanged;
-        var nm = NetworkManager.Singleton;
-        if (nm != null)
-        {
-            nm.OnClientConnectedCallback += OnClientEvent;
-            nm.OnClientDisconnectCallback += OnClientEvent;
-        }
         TryAttach();
     }
 
     private void OnDisable()
     {
         SceneManager.activeSceneChanged -= OnSceneChanged;
-        var nm = NetworkManager.Singleton;
-        if (nm != null)
-        {
-            nm.OnClientConnectedCallback -= OnClientEvent;
-            nm.OnClientDisconnectCallback -= OnClientEvent;
-        }
     }
 
     private void OnSceneChanged(Scene oldScene, Scene newScene)
@@ -50,11 +38,6 @@ public class FirstPersonBootstrap : MonoBehaviour
         if (!_attached)
         {
             TryAttach();
-        }
-        else
-        {
-            // Periodically ensure only local owner controls are enabled
-            if (Time.frameCount % 30 == 0) EnforceOwnershipEnablement();
         }
     }
 
@@ -75,7 +58,6 @@ public class FirstPersonBootstrap : MonoBehaviour
         // Keep transform components consistent with prefab across server and clients.
         // Do not swap NetworkTransform types at runtime to avoid authority mismatches.
 
-        EnforceOwnershipEnablement();
 
         // Disable older camera controllers to avoid conflicts
         var oldFpc = player.GetComponent<FirstPersonCameraController>();
@@ -94,37 +76,7 @@ public class FirstPersonBootstrap : MonoBehaviour
         _attached = true;
     }
 
-    private void OnClientEvent(ulong _)
-    {
-        // When any client connects/disconnects, re-enforce enablement
-        EnforceOwnershipEnablement();
-    }
-
-    private void EnforceOwnershipEnablement()
-    {
-        // Enforce ownership: disable FPSController on non-owned players in this process
-        var allFps = FindObjectsOfType<FPSController>(true);
-        foreach (var f in allFps)
-        {
-            var no = f.GetComponentInParent<NetworkObject>();
-            if (no != null)
-            {
-                f.enabled = no.IsOwner; // only local owner script remains enabled
-            }
-        }
-
-        // Disable older camera follower if present
-        var follow = FindObjectOfType<PlayerCameraFollow>();
-        if (follow) follow.enabled = false;
-
-        // Disable legacy movement scripts on all player objects to avoid double-driving
-        var allLegacy1 = FindObjectsOfType<PlayerControl>(true);
-        foreach (var c in allLegacy1) c.enabled = false;
-        var allLegacy2 = FindObjectsOfType<PlayerControlAuthorative>(true);
-        foreach (var c in allLegacy2) c.enabled = false;
-        var allLegacy3 = FindObjectsOfType<PlayerWithRaycastControl>(true);
-        foreach (var c in allLegacy3) c.enabled = false;
-    }
+    // Intentionally no ownership enforcement toggling at runtime here.
 
     private static Transform FindChildWithTag(Transform root, string tag)
     {

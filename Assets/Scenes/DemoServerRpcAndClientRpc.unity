@@ -2475,7 +2475,7 @@ GameObject:
   - component: {fileID: 270730002}
   m_Layer: 0
   m_Name: CabinetWarningZone
-  m_TagString: Untagged
+  m_TagString: CabinetWarning
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -4582,7 +4582,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &518499866
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4598,7 +4598,7 @@ MonoBehaviour:
   m_NetworkManager: {fileID: 626551820}
   PooledPrefabsList:
   - Prefab: {fileID: 681957988237654865, guid: 75d0befe4694a2e4bb9c295cee04f949, type: 3}
-    PrewarmCount: 1000
+    PrewarmCount: 0
 --- !u!4 &518499867
 Transform:
   m_ObjectHideFlags: 0
@@ -16952,7 +16952,7 @@ GameObject:
   - component: {fileID: 2002414268}
   m_Layer: 0
   m_Name: GlassWarningZone
-  m_TagString: Untagged
+  m_TagString: GlassWarning
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -17024,7 +17024,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &2016632160
 Transform:
   m_ObjectHideFlags: 0
@@ -17054,7 +17054,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   ShowTopMostFoldoutHeaderGroup: 1
   objectPrefab: {fileID: 681957988237654865, guid: 75d0befe4694a2e4bb9c295cee04f949, type: 3}
-  maxObjectInstanceCount: 10
+  maxObjectInstanceCount: 0
+  enablePhysicsObjects: 0
 --- !u!114 &2016632162
 MonoBehaviour:
   m_ObjectHideFlags: 0
