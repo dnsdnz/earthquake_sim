@@ -3,6 +3,7 @@ using TMPro;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.UI;
+using Unity.Netcode.Transports.UTP;
 
 public class UIManager : Singleton<UIManager>
 {
@@ -26,6 +27,10 @@ public class UIManager : Singleton<UIManager>
 
     private bool hasServerStarted;
 
+    [Header("LAN Defaults (when Relay disabled)")]
+    [SerializeField] private string lanAddress = "127.0.0.1";
+    [SerializeField] private ushort lanPort = 7777;
+
     private void Awake()
     {
         Cursor.visible = true;
@@ -41,6 +46,11 @@ public class UIManager : Singleton<UIManager>
         // START SERVER
         startServerButton?.onClick.AddListener(() =>
         {
+            var transport = RelayManager.Instance.Transport;
+            if (transport != null && transport.Protocol != UnityTransport.ProtocolType.RelayUnityTransport)
+            {
+                transport.SetConnectionData(lanAddress, lanPort);
+            }
             if (NetworkManager.Singleton.StartServer())
                 Logger.Instance.LogInfo("Server started...");
             else
@@ -56,6 +66,11 @@ public class UIManager : Singleton<UIManager>
             if (RelayManager.Instance.IsRelayEnabled) 
                 await RelayManager.Instance.SetupRelay();
 
+            var transport = RelayManager.Instance.Transport;
+            if (transport != null && transport.Protocol != UnityTransport.ProtocolType.RelayUnityTransport)
+            {
+                transport.SetConnectionData(lanAddress, lanPort);
+            }
             if (NetworkManager.Singleton.StartHost())
                 Logger.Instance.LogInfo("Host started...");
             else
@@ -65,8 +80,24 @@ public class UIManager : Singleton<UIManager>
         // START CLIENT
         startClientButton?.onClick.AddListener(async () =>
         {
-            if (RelayManager.Instance.IsRelayEnabled && !string.IsNullOrEmpty(joinCodeInput.text))
-                await RelayManager.Instance.JoinRelay(joinCodeInput.text);
+            var transport = RelayManager.Instance.Transport;
+            if (RelayManager.Instance.IsRelayEnabled)
+            {
+                if (!string.IsNullOrEmpty(joinCodeInput.text))
+                {
+                    await RelayManager.Instance.JoinRelay(joinCodeInput.text);
+                }
+                else
+                {
+                    Logger.Instance.LogWarning("Relay is enabled but no Join Code provided. Aborting client start.");
+                    return;
+                }
+            }
+            else if (transport != null)
+            {
+                // Ensure LAN connection data is set for client
+                transport.SetConnectionData(lanAddress, lanPort);
+            }
 
             if(NetworkManager.Singleton.StartClient())
                 Logger.Instance.LogInfo("Client started...");
