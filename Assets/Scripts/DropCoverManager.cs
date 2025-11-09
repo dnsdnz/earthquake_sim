@@ -38,14 +38,28 @@ public class DropCoverManager : NetworkBehaviour
 
         void SpawnIfServer()
         {
-            if (nm.IsServer && Instance == null)
+            if (!nm.IsServer || Instance != null) return;
+
+            // Prefer spawning from a registered prefab so clients can create it too
+            var prefab = Resources.Load<GameObject>("Net/DropCoverManager");
+            if (prefab != null)
             {
-                var go = new GameObject("__DropCoverManager");
-                DontDestroyOnLoad(go);
-                var no = go.AddComponent<NetworkObject>();
-                var mgr = go.AddComponent<DropCoverManager>();
+                var inst = Object.Instantiate(prefab);
+                Object.DontDestroyOnLoad(inst);
+                var no = inst.GetComponent<NetworkObject>();
+                var mgr = inst.GetComponent<DropCoverManager>();
+                if (no == null || mgr == null)
+                {
+                    Debug.LogError("[DropCoverManager] Prefab 'Net/DropCoverManager' must include NetworkObject and DropCoverManager components.");
+                    Object.Destroy(inst);
+                    return;
+                }
                 no.Spawn(true);
                 Instance = mgr;
+            }
+            else
+            {
+                Debug.LogError("[DropCoverManager] Missing network prefab Resources/Net/DropCoverManager. Create a prefab with NetworkObject+DropCoverManager and add it to NetworkManager.NetworkPrefabs.");
             }
         }
 

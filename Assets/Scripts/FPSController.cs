@@ -18,6 +18,8 @@ public class FPSController : MonoBehaviour
     public Transform cameraPivot;
     [Tooltip("Create and use a dedicated Camera instead of Main Camera if none is assigned.")]
     public bool createOwnCameraIfMissing = true;
+    [Tooltip("Always create a dedicated local camera for this player (ignores existing Main Camera).")]
+    public bool alwaysCreateOwnCamera = true;
     public float eyeHeight = 1.7f;
     public float fov = 75f;
     [Tooltip("Forward offset applied to the camera when standing (local Z, meters).")]
@@ -64,6 +66,7 @@ public class FPSController : MonoBehaviour
     private float _standEyeHeight;
     private bool _isCrouching;
     private bool _activeForThisClient = true;
+    private bool _initialized;
     private bool _forcedCrouch;
     private float _lastMoveWarn;
     private float _lastCollisionReport;
@@ -94,76 +97,12 @@ public class FPSController : MonoBehaviour
     {
         _cc = GetComponent<CharacterController>();
         _standEyeHeight = eyeHeight;
-
-        var netObj = GetComponentInParent<NetworkObject>();
-        if (ownerOnly && netObj != null && NetworkManager.Singleton != null)
-        {
-            _activeForThisClient = netObj.IsOwner && NetworkManager.Singleton.IsListening;
-        }
+        _activeForThisClient = true; // delay precise owner check to runtime
     }
 
     private void Start()
     {
-        if (!_activeForThisClient)
-        {
-            enabled = false; return;
-        }
-
-        // Camera setup
-        _cam = Camera.main;
-        if (cameraPivot == null)
-        {
-            var pivot = new GameObject("FPS_CameraPivot");
-            pivot.transform.SetParent(transform, false);
-            pivot.transform.localPosition = new Vector3(0, eyeHeight, 0);
-            pivot.transform.localRotation = Quaternion.identity;
-            cameraPivot = pivot.transform;
-        }
-
-        if (_cam == null && createOwnCameraIfMissing)
-        {
-            var go = new GameObject("FPS_Camera");
-            _cam = go.AddComponent<Camera>();
-            _cam.tag = "MainCamera";
-        }
-        if (_cam != null)
-        {
-            _originalCamParent = _cam.transform.parent;
-            _cam.transform.SetParent(cameraPivot, false);
-            _cam.transform.localPosition = Vector3.zero;
-            _cam.transform.localRotation = Quaternion.identity;
-            _cam.fieldOfView = fov;
-
-            var brain = _cam.GetComponent<CinemachineBrain>();
-            if (brain != null) brain.enabled = false;
-        }
-
-        var fpc = GetComponent<FirstPersonCameraController>();
-        if (fpc)
-        {
-            fpc.enabled = false; // avoid competing controls
-        }
-        var follow = FindObjectOfType<PlayerCameraFollow>();
-        if (follow) follow.enabled = false;
-
-        if (lockCursor)
-        {
-            Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false;
-        }
-
-        // Initialize look state to current body yaw
-        _yaw = transform.eulerAngles.y;
-        _targetYaw = _yaw;
-        _pitch = 0f;
-        _targetPitch = 0f;
-
-        _animSync = GetComponent<FPSAnimatorSync>();
-        if (_animSync == null)
-        {
-            _animSync = gameObject.AddComponent<FPSAnimatorSync>();
-        }
-
-        _cameraBaseHeight = eyeHeight;
+        TryInitialize();
     }
 
     private void OnDisable()
@@ -176,7 +115,11 @@ public class FPSController : MonoBehaviour
 
     private void Update()
     {
-        if (!_activeForThisClient) return;
+        if (!_initialized)
+        {
+            TryInitialize();
+            if (!_initialized) return;
+        }
 
         // Trigger quake
         if (Input.GetKeyDown(quakeKey))
@@ -208,6 +151,94 @@ public class FPSController : MonoBehaviour
         UpdateQuake(Time.deltaTime);
         HandleLook();
         HandleMove();
+    }
+
+    private bool IsLocalOwner()
+    {
+        if (!ownerOnly) return true;
+        var netObj = GetComponentInParent<NetworkObject>();
+        if (netObj == null) return true;
+        var nm = NetworkManager.Singleton;
+        return nm != null && netObj.IsOwner;
+    }
+
+    private void TryInitialize()
+    {
+        if (_initialized) return;
+        if (!IsLocalOwner()) return;
+
+        // Camera setup
+        _cam = Camera.main;
+        if (cameraPivot == null)
+        {
+            var pivot = new GameObject("FPS_CameraPivot");
+            pivot.transform.SetParent(transform, false);
+            pivot.transform.localPosition = new Vector3(0, eyeHeight, 0);
+            pivot.transform.localRotation = Quaternion.identity;
+            cameraPivot = pivot.transform;
+        }
+
+        if (alwaysCreateOwnCamera || (_cam == null && createOwnCameraIfMissing))
+        {
+            var go = new GameObject("FPS_Camera");
+            _cam = go.AddComponent<Camera>();
+            _cam.tag = "MainCamera";
+        }
+        if (_cam != null)
+        {
+            _originalCamParent = _cam.transform.parent;
+            _cam.transform.SetParent(cameraPivot, false);
+            _cam.transform.localPosition = Vector3.zero;
+            _cam.transform.localRotation = Quaternion.identity;
+            _cam.fieldOfView = fov;
+
+            var brain = _cam.GetComponent<CinemachineBrain>();
+            if (brain != null) brain.enabled = false;
+
+            // Ensure only this local camera is active and has audio listener
+            _cam.enabled = true;
+            var listener = _cam.GetComponent<AudioListener>();
+            if (listener == null) listener = _cam.gameObject.AddComponent<AudioListener>();
+            listener.enabled = true;
+
+            var allCams = Camera.allCameras;
+            for (int i = 0; i < allCams.Length; i++)
+            {
+                var c = allCams[i];
+                if (c == _cam) continue;
+                c.enabled = false;
+                var al = c.GetComponent<AudioListener>();
+                if (al) al.enabled = false;
+            }
+        }
+
+        var fpc = GetComponent<FirstPersonCameraController>();
+        if (fpc)
+        {
+            fpc.enabled = false; // avoid competing controls
+        }
+        var follow = FindObjectOfType<PlayerCameraFollow>();
+        if (follow) follow.enabled = false;
+
+        if (lockCursor)
+        {
+            Cursor.lockState = CursorLockMode.Locked; Cursor.visible = false;
+        }
+
+        // Initialize look state to current body yaw
+        _yaw = transform.eulerAngles.y;
+        _targetYaw = _yaw;
+        _pitch = 0f;
+        _targetPitch = 0f;
+
+        _animSync = GetComponent<FPSAnimatorSync>();
+        if (_animSync == null)
+        {
+            _animSync = gameObject.AddComponent<FPSAnimatorSync>();
+        }
+
+        _cameraBaseHeight = eyeHeight;
+        _initialized = true;
     }
 
     private void HandleLook()

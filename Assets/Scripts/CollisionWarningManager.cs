@@ -15,14 +15,27 @@ public class CollisionWarningManager : NetworkBehaviour
 
         void SpawnIfServer()
         {
-            if (nm.IsServer && Instance == null)
+            if (!nm.IsServer || Instance != null) return;
+
+            var prefab = Resources.Load<GameObject>("Net/CollisionWarningManager");
+            if (prefab != null)
             {
-                var go = new GameObject("__CollisionWarningManager");
-                Object.DontDestroyOnLoad(go);
-                var no = go.AddComponent<NetworkObject>();
-                var mgr = go.AddComponent<CollisionWarningManager>();
+                var inst = Object.Instantiate(prefab);
+                Object.DontDestroyOnLoad(inst);
+                var no = inst.GetComponent<NetworkObject>();
+                var mgr = inst.GetComponent<CollisionWarningManager>();
+                if (no == null || mgr == null)
+                {
+                    Debug.LogError("[CollisionWarningManager] Prefab 'Net/CollisionWarningManager' must include NetworkObject and CollisionWarningManager components.");
+                    Object.Destroy(inst);
+                    return;
+                }
                 no.Spawn(true);
                 Instance = mgr;
+            }
+            else
+            {
+                Debug.LogError("[CollisionWarningManager] Missing network prefab Resources/Net/CollisionWarningManager. Create a prefab with NetworkObject+CollisionWarningManager and add it to NetworkManager.NetworkPrefabs.");
             }
         }
 
@@ -69,4 +82,3 @@ public class CollisionWarningManager : NetworkBehaviour
         _lastShown = Time.time;
     }
 }
-
