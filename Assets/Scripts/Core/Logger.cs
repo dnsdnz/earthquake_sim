@@ -15,12 +15,14 @@ public class Logger : Singleton<Logger>
     [SerializeField]
     private int maxLines = 15;
 
+    // Always keep UI logger hidden for players/host unless explicitly re-enabled for debugging.
     void Awake()
     {
         if (debugAreaText == null)
         {
             debugAreaText = GetComponent<TextMeshProUGUI>();
         }
+        enableDebug = false;
         debugAreaText.text = string.Empty;
     }
 
@@ -31,27 +33,31 @@ public class Logger : Singleton<Logger>
 
         if (enabled)
         {
-            debugAreaText.text += $"<color=\"white\">{DateTime.Now.ToString("HH:mm:ss.fff")} {this.GetType().Name} enabled</color>\n";
+            var timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
+            debugAreaText.text += $"<color=white>{timestamp} {GetType().Name} enabled</color>\n";
         }
     }
 
     public void LogInfo(string message)
     {
+        if (!enableDebug) return;
         ClearLines();
 
-        debugAreaText.text += $"<color=\"green\">{DateTime.Now.ToString("HH:mm:ss.fff")} {message}</color>\n";
+        debugAreaText.text += $"<color=green>{DateTime.Now:HH:mm:ss.fff} {message}</color>\n";
     }
 
     public void LogError(string message)
     {
+        if (!enableDebug) return;
         ClearLines();
-        debugAreaText.text += $"<color=\"red\">{DateTime.Now.ToString("HH:mm:ss.fff")} {message}</color>\n";
+        debugAreaText.text += $"<color=red>{DateTime.Now:HH:mm:ss.fff} {message}</color>\n";
     }
 
     public void LogWarning(string message)
     {
+        if (!enableDebug) return;
         ClearLines();
-        debugAreaText.text += $"<color=\"yellow\">{DateTime.Now.ToString("HH:mm:ss.fff")} {message}</color>\n";
+        debugAreaText.text += $"<color=yellow>{DateTime.Now:HH:mm:ss.fff} {message}</color>\n";
     }
 
     private void ClearLines()

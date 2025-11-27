@@ -5,6 +5,7 @@ using UnityEngine;
 // Attach to a scene GameObject and assign spawn points.
 public class PlayerSpawnManager : MonoBehaviour
 {
+    public static PlayerSpawnManager Instance { get; private set; }
     [Header("Spawn Points")]
     [Tooltip("Optional root to scan children for spawn points when Auto Populate is enabled.")]
     [SerializeField] private Transform spawnRoot;
@@ -24,6 +25,16 @@ public class PlayerSpawnManager : MonoBehaviour
 
     private int _nextIndex = 0;
     private readonly System.Collections.Generic.Dictionary<ulong, int> _assigned = new System.Collections.Generic.Dictionary<ulong, int>();
+    private readonly System.Collections.Generic.Dictionary<ulong, Pose> _spawnPoses = new System.Collections.Generic.Dictionary<ulong, Pose>();
+
+    private void Awake()
+    {
+        if (Instance != null && Instance != this)
+        {
+            Debug.LogWarning("[PlayerSpawnManager] Multiple instances detected. Latest instance will be used.");
+        }
+        Instance = this;
+    }
 
     private void Reset()
     {
@@ -53,10 +64,15 @@ public class PlayerSpawnManager : MonoBehaviour
 
     private void OnEnable()
     {
+        if (Instance == null)
+        {
+            Instance = this;
+        }
         if (NetworkManager.Singleton != null)
         {
             NetworkManager.Singleton.OnServerStarted += OnServerStarted;
             NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
+            NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
         }
     }
 
@@ -66,6 +82,19 @@ public class PlayerSpawnManager : MonoBehaviour
         {
             NetworkManager.Singleton.OnServerStarted -= OnServerStarted;
             NetworkManager.Singleton.OnClientConnectedCallback -= OnClientConnected;
+            NetworkManager.Singleton.OnClientDisconnectCallback -= OnClientDisconnected;
+        }
+        if (Instance == this)
+        {
+            Instance = null;
+        }
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
+        {
+            Instance = null;
         }
     }
 
@@ -83,6 +112,12 @@ public class PlayerSpawnManager : MonoBehaviour
     {
         if (!NetworkManager.Singleton.IsServer) return;
         TryPlacePlayer(clientId);
+    }
+
+    private void OnClientDisconnected(ulong clientId)
+    {
+        _assigned.Remove(clientId);
+        _spawnPoses.Remove(clientId);
     }
 
     private void TryPlacePlayer(ulong clientId)
@@ -113,10 +148,7 @@ public class PlayerSpawnManager : MonoBehaviour
             if (sp != null)
             {
                 Debug.Log($"[SpawnManager] Placing client {clientId} at spawn index {index}: {sp.name}");
-                var cc = t.GetComponent<CharacterController>();
-                if (cc != null) cc.enabled = false;
-                t.SetPositionAndRotation(sp.position, sp.rotation);
-                if (cc != null) cc.enabled = true;
+                ApplyPlacement(t, sp.position, sp.rotation, clientId);
                 return;
             }
         }
@@ -124,13 +156,8 @@ public class PlayerSpawnManager : MonoBehaviour
         // Fallback: place on a simple circle around origin based on clientId
         float angle = (clientId % 16) * Mathf.PI * 2f / 16f;
         Vector3 pos = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * 3f;
-        {
-            Debug.Log($"[SpawnManager] Fallback placement for client {clientId}");
-            var cc = t.GetComponent<CharacterController>();
-            if (cc != null) cc.enabled = false;
-            t.SetPositionAndRotation(pos, Quaternion.Euler(0f, -Mathf.Rad2Deg * angle, 0f));
-            if (cc != null) cc.enabled = true;
-        }
+        Debug.Log($"[SpawnManager] Fallback placement for client {clientId}");
+        ApplyPlacement(t, pos, Quaternion.Euler(0f, -Mathf.Rad2Deg * angle, 0f), clientId);
     }
 
     // Public API to be called by player prefab on spawn (server-side)
@@ -155,10 +182,7 @@ public class PlayerSpawnManager : MonoBehaviour
             if (sp != null)
             {
                 Debug.Log($"[SpawnManager] Placing client {clientId} at spawn index {index}: {sp.name}");
-                var cc = t.GetComponent<CharacterController>();
-                if (cc != null) cc.enabled = false;
-                t.SetPositionAndRotation(sp.position, sp.rotation);
-                if (cc != null) cc.enabled = true;
+                ApplyPlacement(t, sp.position, sp.rotation, clientId);
                 return;
             }
         }
@@ -166,13 +190,8 @@ public class PlayerSpawnManager : MonoBehaviour
         // Fallback
         float angle = (clientId % 16) * Mathf.PI * 2f / 16f;
         Vector3 pos = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * 3f;
-        {
-            Debug.Log($"[SpawnManager] Fallback placement for client {clientId}");
-            var cc = t.GetComponent<CharacterController>();
-            if (cc != null) cc.enabled = false;
-            t.SetPositionAndRotation(pos, Quaternion.Euler(0f, -Mathf.Rad2Deg * angle, 0f));
-            if (cc != null) cc.enabled = true;
-        }
+        Debug.Log($"[SpawnManager] Fallback placement for client {clientId}");
+        ApplyPlacement(t, pos, Quaternion.Euler(0f, -Mathf.Rad2Deg * angle, 0f), clientId);
     }
 
     private int SelectIndex(ulong clientId)
@@ -190,6 +209,15 @@ public class PlayerSpawnManager : MonoBehaviour
         }
     }
 
+    private void ApplyPlacement(Transform target, Vector3 position, Quaternion rotation, ulong clientId)
+    {
+        var cc = target.GetComponent<CharacterController>();
+        if (cc != null) cc.enabled = false;
+        target.SetPositionAndRotation(position, rotation);
+        if (cc != null) cc.enabled = true;
+        _spawnPoses[clientId] = new Pose(position, rotation);
+    }
+
     private System.Collections.IEnumerator PlaceWhenReady(ulong clientId)
     {
         // wait few frames for PlayerObject to spawn
@@ -205,6 +233,19 @@ public class PlayerSpawnManager : MonoBehaviour
                 yield break;
             }
         }
+    }
+
+    public bool TryGetSpawnLocation(ulong clientId, out Vector3 position, out Quaternion rotation)
+    {
+        if (_spawnPoses.TryGetValue(clientId, out var pose))
+        {
+            position = pose.position;
+            rotation = pose.rotation;
+            return true;
+        }
+        position = default;
+        rotation = default;
+        return false;
     }
 
     private void OnDrawGizmosSelected()

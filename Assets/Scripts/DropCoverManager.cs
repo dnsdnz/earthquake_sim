@@ -331,6 +331,39 @@ public class DropCoverManager : NetworkBehaviour
         }
     }
 
+    private void TryReturnPlayerToSpawn(ulong clientId)
+    {
+        if (NetworkManager.Singleton == null) return;
+        if (!NetworkManager.Singleton.ConnectedClients.ContainsKey(clientId)) return;
+        var playerObj = NetworkManager.Singleton.ConnectedClients[clientId].PlayerObject;
+        if (playerObj == null) return;
+        if (!TryGetSpawnPose(clientId, out var spawnPos, out var spawnRot)) return;
+
+        var cc = playerObj.GetComponent<CharacterController>();
+        if (cc != null) cc.enabled = false;
+        playerObj.transform.SetPositionAndRotation(spawnPos, spawnRot);
+        if (cc != null) cc.enabled = true;
+
+        NetworkObjectReference noRef = new NetworkObjectReference(playerObj);
+        WarpPlayerClientRpc(noRef, spawnPos, spawnRot);
+    }
+
+    private bool TryGetSpawnPose(ulong clientId, out Vector3 position, out Quaternion rotation)
+    {
+        var spawnManager = PlayerSpawnManager.Instance;
+        if (spawnManager == null)
+        {
+            spawnManager = Object.FindFirstObjectByType<PlayerSpawnManager>();
+        }
+        if (spawnManager != null && spawnManager.TryGetSpawnLocation(clientId, out position, out rotation))
+        {
+            return true;
+        }
+        position = default;
+        rotation = default;
+        return false;
+    }
+
     public static void RequestExitForLocal()
     {
         if (Instance != null)
@@ -344,6 +377,7 @@ public class DropCoverManager : NetworkBehaviour
     {
         if (!_releaseActive) return; // only allow after quake fully ended
         ulong sender = rpcParams.Receive.SenderClientId;
+        TryReturnPlayerToSpawn(sender);
         var sendParams = new ClientRpcParams
         {
             Send = new ClientRpcSendParams { TargetClientIds = new[] { sender } }

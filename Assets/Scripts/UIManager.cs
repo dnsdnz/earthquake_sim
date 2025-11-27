@@ -4,6 +4,8 @@ using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.UI;
 using Unity.Netcode.Transports.UTP;
+using UnityEngine.EventSystems;
+using System.Linq;
 
 public class UIManager : Singleton<UIManager>
 {
@@ -25,6 +27,12 @@ public class UIManager : Singleton<UIManager>
     [SerializeField]
     private Button executePhysicsButton;
 
+    [Header("UI Scaling")]
+    [SerializeField] private CanvasScaler canvasScaler;
+    [SerializeField] private Vector2 referenceResolution = new Vector2(1920, 1080);
+    [SerializeField] private float matchWidthOrHeight = 0.5f;
+    [SerializeField] private Canvas uiCanvas;
+
     private bool hasServerStarted;
 
     [Header("LAN Defaults (when Relay disabled)")]
@@ -34,6 +42,13 @@ public class UIManager : Singleton<UIManager>
     private void Awake()
     {
         Cursor.visible = true;
+        Cursor.lockState = CursorLockMode.None;
+        EnsureCanvasAndEventSystem();
+        if (NetworkManager.Singleton != null && (NetworkManager.Singleton.IsServer || NetworkManager.Singleton.IsClient))
+        {
+            HideNetworkControls();
+        }
+        ConfigureCanvasScaler();
     }
 
     void Update()
@@ -43,6 +58,10 @@ public class UIManager : Singleton<UIManager>
 
     void Start()
     {
+        if (playersInGameText != null)
+        {
+            playersInGameText.raycastTarget = false;
+        }
         // START SERVER
         startServerButton?.onClick.AddListener(() =>
         {
@@ -52,7 +71,10 @@ public class UIManager : Singleton<UIManager>
                 transport.SetConnectionData(lanAddress, lanPort);
             }
             if (NetworkManager.Singleton.StartServer())
+            {
                 Logger.Instance.LogInfo("Server started...");
+                HideNetworkControls();
+            }
             else
                 Logger.Instance.LogInfo("Unable to start server...");
         });
@@ -72,7 +94,10 @@ public class UIManager : Singleton<UIManager>
                 transport.SetConnectionData(lanAddress, lanPort);
             }
             if (NetworkManager.Singleton.StartHost())
+            {
                 Logger.Instance.LogInfo("Host started...");
+                HideNetworkControls();
+            }
             else
                 Logger.Instance.LogInfo("Unable to start host...");
         });
@@ -100,7 +125,10 @@ public class UIManager : Singleton<UIManager>
             }
 
             if(NetworkManager.Singleton.StartClient())
+            {
                 Logger.Instance.LogInfo("Client started...");
+                HideNetworkControls();
+            }
             else
                 Logger.Instance.LogInfo("Unable to start client...");
         });
@@ -109,11 +137,16 @@ public class UIManager : Singleton<UIManager>
         NetworkManager.Singleton.OnClientConnectedCallback += (id) =>
         {
             Logger.Instance.LogInfo($"{id} just connected...");
+            if (NetworkManager.Singleton.LocalClientId == id)
+            {
+                HideNetworkControls();
+            }
         };
 
         NetworkManager.Singleton.OnServerStarted += () =>
         {
             hasServerStarted = true;
+            HideNetworkControls();
         };
 
         executePhysicsButton.onClick.AddListener(() => 
@@ -134,5 +167,106 @@ public class UIManager : Singleton<UIManager>
                 Logger.Instance.LogInfo("SpawnerControl not present; physics spawn skipped.");
             }
         });
+    }
+
+    private void ConfigureCanvasScaler()
+    {
+        if (canvasScaler == null)
+        {
+            canvasScaler = uiCanvas != null ? uiCanvas.GetComponent<CanvasScaler>() : null;
+        }
+        if (canvasScaler == null && uiCanvas != null)
+        {
+            canvasScaler = uiCanvas.gameObject.AddComponent<CanvasScaler>();
+        }
+        if (canvasScaler == null) return;
+
+        canvasScaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        canvasScaler.referenceResolution = referenceResolution;
+        canvasScaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+        canvasScaler.matchWidthOrHeight = matchWidthOrHeight;
+    }
+
+    private void EnsureCanvasAndEventSystem()
+    {
+        if (uiCanvas == null)
+        {
+            uiCanvas = GetComponentInParent<Canvas>();
+        }
+        if (uiCanvas == null && startHostButton != null)
+        {
+            uiCanvas = startHostButton.GetComponentInParent<Canvas>();
+        }
+        if (uiCanvas == null && startServerButton != null)
+        {
+            uiCanvas = startServerButton.GetComponentInParent<Canvas>();
+        }
+        if (uiCanvas == null && startClientButton != null)
+        {
+            uiCanvas = startClientButton.GetComponentInParent<Canvas>();
+        }
+        if (uiCanvas == null)
+        {
+            uiCanvas = FindObjectOfType<Canvas>();
+        }
+        if (uiCanvas != null)
+        {
+            uiCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            uiCanvas.overridePixelPerfect = false;
+            var rt = uiCanvas.GetComponent<RectTransform>();
+            if (rt != null)
+            {
+                rt.anchorMin = Vector2.zero;
+                rt.anchorMax = Vector2.one;
+                rt.pivot = new Vector2(0.5f, 0.5f);
+                rt.sizeDelta = Vector2.zero;
+                rt.localScale = Vector3.one;
+            }
+            if (uiCanvas.GetComponent<GraphicRaycaster>() == null)
+            {
+                uiCanvas.gameObject.AddComponent<GraphicRaycaster>();
+            }
+            var cg = uiCanvas.GetComponent<CanvasGroup>();
+            if (cg == null) cg = uiCanvas.gameObject.AddComponent<CanvasGroup>();
+            cg.interactable = true;
+            cg.blocksRaycasts = true;
+            cg.ignoreParentGroups = false;
+        }
+
+        // Ensure the buttons can receive raycasts (in case target graphics were disabled)
+        EnableRaycastOnButtonGraphic(startHostButton);
+        EnableRaycastOnButtonGraphic(startServerButton);
+        EnableRaycastOnButtonGraphic(startClientButton);
+        EnableRaycastOnButtonGraphic(executePhysicsButton);
+
+        if (EventSystem.current == null)
+        {
+            var es = new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+            DontDestroyOnLoad(es);
+            var sim = es.GetComponent<StandaloneInputModule>();
+            sim.forceModuleActive = true;
+        }
+        else
+        {
+            var sim = EventSystem.current.GetComponent<StandaloneInputModule>();
+            if (sim != null)
+            {
+                sim.forceModuleActive = true;
+            }
+        }
+    }
+
+    private static void EnableRaycastOnButtonGraphic(Button button)
+    {
+        if (button == null || button.targetGraphic == null) return;
+        button.targetGraphic.raycastTarget = true;
+    }
+
+    private void HideNetworkControls()
+    {
+        startServerButton?.gameObject.SetActive(false);
+        startHostButton?.gameObject.SetActive(false);
+        startClientButton?.gameObject.SetActive(false);
+        executePhysicsButton?.gameObject.SetActive(false);
     }
 }
